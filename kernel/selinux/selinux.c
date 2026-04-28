@@ -226,27 +226,157 @@ void escape_to_root_for_adb_root(void)
 }
 
 #else
-/* 4.x stubs: SELinux integration is non-functional on this kernel.
- * apps cannot escalate via SELinux domain transition.
- * This is a known limitation of running latest KernelSU on non-GKI 4.19.
+/* 4.x SELinux integration: use 4.19's existing APIs.
+ *
+ * The 5.7+ version of this file uses selinux_state.policy / RCU policy
+ * derefs that don't exist on 4.19. But the FUNCTIONAL primitives we
+ * actually need (security_secctx_to_secid, enforcing_set, selinux_cred,
+ * commit_creds + caps) all work the same on 4.19.
+ *
+ * Note: ksu_domain SID lookup will fail unless the running SELinux policy
+ * actually has "u:r:ksu:s0" defined. For unmodified Android policy this
+ * IS NOT the case — so cred SID stays at original value after escalation.
+ * Effects:
+ *   - uid=0 escalation works (privileged caps granted)
+ *   - SELinux DAC checks pass (running as root)
+ *   - SELinux MAC checks may still deny if context can't access target
+ * Workaround on userdebug ROM: `adb shell setenforce 0`.
+ *
+ * For unmodified-policy + enforcing scenarios, full functionality requires
+ * runtime sepolicy modification (rules.c/sepolicy.c) which is OOS for now.
  */
 #include <linux/cred.h>
+#include <linux/sched.h>
+#include <linux/string.h>
+#include <linux/capability.h>
+#include "objsec.h"
 #include "selinux.h"
 #include "klog.h"
 
+extern struct selinux_state selinux_state;
+extern const struct cred *ksu_cred;  /* defined in core/init.c */
+
+static u32 cached_su_sid __read_mostly = 0;
+static u32 cached_zygote_sid __read_mostly = 0;
+static u32 cached_init_sid __read_mostly = 0;
 u32 ksu_file_sid __read_mostly = 0;
 
-void setup_selinux(const char *p, struct cred *c) { (void)p; (void)c; }
-void setenforce(bool e) { (void)e; }
-bool getenforce(void) { return false; }
-void cache_sid(void) { }
-bool is_task_ksu_domain(const struct cred *cred) { (void)cred; return false; }
-bool is_ksu_domain(void) { return false; }
-bool is_zygote(const struct cred *cred) { (void)cred; return false; }
-bool is_init(const struct cred *cred) { (void)cred; return false; }
-void setup_ksu_cred(void) { }
-void escape_to_root_for_adb_root(void) {
-    /* On 4.19, just commit the override using current's existing creds.
-     * adbd is already root in userdebug; no SELinux escalation needed. */
+void cache_sid(void)
+{
+    int ret;
+    ret = security_secctx_to_secid(KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT), &cached_su_sid);
+    pr_info("cache_sid: ksu sid=%u (rc=%d)\n", cached_su_sid, ret);
+    ret = security_secctx_to_secid(ZYGOTE_CONTEXT, strlen(ZYGOTE_CONTEXT), &cached_zygote_sid);
+    pr_info("cache_sid: zygote sid=%u (rc=%d)\n", cached_zygote_sid, ret);
+    ret = security_secctx_to_secid(INIT_CONTEXT, strlen(INIT_CONTEXT), &cached_init_sid);
+    pr_info("cache_sid: init sid=%u (rc=%d)\n", cached_init_sid, ret);
+    ret = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT), &ksu_file_sid);
+    pr_info("cache_sid: ksu_file sid=%u (rc=%d)\n", ksu_file_sid, ret);
+}
+
+void setup_selinux(const char *domain, struct cred *cred)
+{
+    u32 sid;
+    int ret = security_secctx_to_secid(domain, strlen(domain), &sid);
+    if (ret == 0 && sid != 0) {
+        struct task_security_struct *tsec = selinux_cred(cred);
+        tsec->sid = sid;
+        tsec->osid = sid;
+        tsec->exec_sid = sid;
+        pr_info("setup_selinux: set domain=%s sid=%u\n", domain, sid);
+    } else {
+        pr_warn("setup_selinux: domain=%s lookup failed (rc=%d) — running with original SID\n", domain, ret);
+    }
+}
+
+void setenforce(bool enforcing)
+{
+    enforcing_set(&selinux_state, enforcing);
+    pr_info("setenforce: %s\n", enforcing ? "enforcing" : "permissive");
+}
+
+bool getenforce(void)
+{
+    return enforcing_enabled(&selinux_state);
+}
+
+bool is_task_ksu_domain(const struct cred *cred)
+{
+    struct task_security_struct *tsec;
+    if (cached_su_sid == 0) return false;
+    if (!cred) return false;
+    tsec = selinux_cred(cred);
+    return tsec->sid == cached_su_sid;
+}
+
+bool is_ksu_domain(void)
+{
+    return is_task_ksu_domain(current_cred());
+}
+
+bool is_zygote(const struct cred *cred)
+{
+    struct task_security_struct *tsec;
+    if (cached_zygote_sid == 0) return false;
+    if (!cred) return false;
+    tsec = selinux_cred(cred);
+    return tsec->sid == cached_zygote_sid;
+}
+
+bool is_init(const struct cred *cred)
+{
+    struct task_security_struct *tsec;
+    if (cached_init_sid == 0) return false;
+    if (!cred) return false;
+    tsec = selinux_cred(cred);
+    return tsec->sid == cached_init_sid;
+}
+
+void setup_ksu_cred(void)
+{
+    /* ksu_cred is the global cred used as override for KSU operations.
+     * Set its SID to ksu_domain (if available) so override_creds() places
+     * the calling task in ksu domain temporarily. */
+    cache_sid();
+    if (ksu_cred && cached_su_sid != 0) {
+        struct task_security_struct *tsec = selinux_cred((struct cred *)ksu_cred);
+        tsec->sid = cached_su_sid;
+        tsec->osid = cached_su_sid;
+        tsec->exec_sid = cached_su_sid;
+        pr_info("setup_ksu_cred: ksu_cred SID set to %u\n", cached_su_sid);
+    } else if (ksu_cred) {
+        pr_info("setup_ksu_cred: ksu_cred kept at original SID (ksu domain not in policy)\n");
+    }
+}
+
+void escape_to_root_for_adb_root(void)
+{
+    struct cred *new = prepare_creds();
+    if (!new) {
+        pr_err("escape_to_root: prepare_creds failed\n");
+        return;
+    }
+
+    /* Full uid/gid escalation */
+    new->uid.val = new->euid.val = new->fsuid.val = new->suid.val = 0;
+    new->gid.val = new->egid.val = new->fsgid.val = new->sgid.val = 0;
+
+    /* Full capability set */
+    memset(&new->cap_inheritable, 0xff, sizeof(new->cap_inheritable));
+    memset(&new->cap_permitted, 0xff, sizeof(new->cap_permitted));
+    memset(&new->cap_effective, 0xff, sizeof(new->cap_effective));
+    memset(&new->cap_bset, 0xff, sizeof(new->cap_bset));
+    memset(&new->cap_ambient, 0xff, sizeof(new->cap_ambient));
+
+    /* SELinux SID transition (best-effort) */
+    if (cached_su_sid != 0) {
+        struct task_security_struct *tsec = selinux_cred(new);
+        tsec->sid = cached_su_sid;
+        tsec->osid = cached_su_sid;
+        tsec->exec_sid = cached_su_sid;
+    }
+
+    commit_creds(new);
+    pr_info("escape_to_root_for_adb_root: done\n");
 }
 #endif /* >= 5.7 */
