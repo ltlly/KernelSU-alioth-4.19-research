@@ -179,6 +179,16 @@ int __init kernelsu_init(void)
     kobject_del(&THIS_MODULE->mkobj.kobj);
 #endif
 #endif
+
+    /* 4.19-research kernel: SELinux's `ksu` domain isn't in policy, so KSU
+     * can't transition escalated processes to it. Set permissive at boot
+     * so apps that get root via KSU manager don't hit MAC denials.
+     * This is intentional for a research/dev kernel. To re-enable enforcing
+     * at runtime: `adb shell setenforce 1`.
+     */
+    pr_info("kernelsu 4.19-research: setting SELinux permissive\n");
+    setenforce(false);
+
     return 0;
 }
 

@@ -29,18 +29,27 @@
 // clang-format off
 static const char KERNEL_SU_RC[] =
     "\n"
+    /* 4.19 research-kernel: 'ksu' SELinux domain isn't in stock policy, so KSU
+     * can't transition apps into ksu domain. Set permissive at multiple stages
+     * to override Android init's selinux_setup. */
+    "on early-init\n"
+    "    setenforce 0\n"
+    "\n"
     "on post-fs-data\n"
+    "    setenforce 0\n"
     "    start logd\n"
-    // We should wait for the post-fs-data finish
     "    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " post-fs-data\n"
     "\n"
     "on nonencrypted\n"
+    "    setenforce 0\n"
     "    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
     "\n"
     "on property:vold.decrypt=trigger_restart_framework\n"
+    "    setenforce 0\n"
     "    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " services\n"
     "\n"
     "on property:sys.boot_completed=1\n"
+    "    setenforce 0\n"
     "    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " boot-completed\n"
     "\n"
     "\n";
