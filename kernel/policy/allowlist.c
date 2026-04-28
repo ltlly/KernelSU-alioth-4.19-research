@@ -10,10 +10,19 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/printk.h>
+#include <linux/sched/task.h>  /* put_task_struct */
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/version.h>
 #include <linux/compiler_types.h>
+
+/* TWA_RESUME enum was added in 5.11; before that, task_work_add's third arg
+ * was `bool notify` where true means "resume notify". Map for back-compat. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
+#ifndef TWA_RESUME
+#define TWA_RESUME true
+#endif
+#endif
 
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"

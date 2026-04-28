@@ -1,4 +1,7 @@
 #include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 13, 0)
+/* Original implementation for kernels with seccomp arch native macros (5.13+). */
 #include <linux/fs.h>
 #include <linux/nsproxy.h>
 #include <linux/sched/task.h>
@@ -63,3 +66,13 @@ void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
     }
 #endif
 }
+#else
+/* 4.x stubs: seccomp arch macros not present; cache manipulation is a no-op.
+ * On 4.19, seccomp doesn't expose its cache structure, so skip.
+ */
+#include <linux/fs.h>
+#include "infra/seccomp_cache.h"
+
+void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr) { (void)filter; (void)nr; }
+void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr) { (void)filter; (void)nr; }
+#endif

@@ -1,3 +1,9 @@
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+/* Original implementation requires file_operations::iopoll (5.1+),
+ * remap_file_range (4.20+), REMAP_FILE_DEDUP. 4.19 lacks all of these.
+ */
 #include <linux/gfp.h>
 #include <linux/fdtable.h>
 #include <linux/export.h>
@@ -578,3 +584,13 @@ void __init ksu_file_wrapper_init(void)
     fput(dummy);
 #endif
 }
+
+#else
+/* 4.x stubs: file wrapping disabled (file_operations::iopoll, remap_file_range
+ * not available). Pseudo-terminal proxy file feature is unavailable on 4.19.
+ */
+#include "infra/file_wrapper.h"
+
+int ksu_install_file_wrapper(int fd) { (void)fd; return -ENOSYS; }
+void ksu_file_wrapper_init(void) { /* no-op */ }
+#endif

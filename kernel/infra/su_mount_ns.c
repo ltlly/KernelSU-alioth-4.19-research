@@ -1,3 +1,9 @@
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+/* Original implementation requires uapi/linux/mount.h (5.5+) and path_mount
+ * (added in 5.9). 4.x kernels lack both — provide a no-op stub instead.
+ */
 #include <linux/dcache.h>
 #include <linux/errno.h>
 #include <linux/fdtable.h>
@@ -12,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
-#include <linux/version.h>
 #include <uapi/linux/mount.h>
 
 #include "arch.h"
@@ -185,3 +190,18 @@ void setup_mount_ns(int32_t ns_mode)
     }
     revert_creds(old_cred);
 }
+
+#else
+/* 4.x stub: setup_mount_ns is a no-op (mount namespace switching unavailable). */
+#include "infra/su_mount_ns.h"
+#include "klog.h"
+
+void setup_mount_ns(int32_t ns_mode)
+{
+    (void)ns_mode;
+    /* 4.19 lacks path_mount and ksys_unshare API; mount namespace remains
+     * inherited (KSU_NS_INHERITED behavior). Apps will see whatever mount
+     * namespace they were launched with.
+     */
+}
+#endif
