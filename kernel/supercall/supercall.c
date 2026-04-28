@@ -11,6 +11,14 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
+/* TWA_RESUME enum added in 5.11; before that task_work_add's third arg
+ * was bool notify, where true means resume notify. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
+#ifndef TWA_RESUME
+#define TWA_RESUME true
+#endif
+#endif
+
 #include "uapi/supercall.h"
 #include "supercall/internal.h"
 #include "arch.h"

@@ -1,3 +1,6 @@
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+/* policydb internals refactored — wrap */
 #include "ss/avtab.h"
 #include "ss/constraint.h"
 #include "ss/ebitmap.h"
@@ -1222,3 +1225,30 @@ out:
     kfree(new_pol);
     return NULL;
 }
+
+#else
+/* 4.x stubs: SELinux policy manipulation disabled. */
+#include <linux/types.h>
+#include <linux/errno.h>
+struct policydb;
+struct selinux_policy;
+struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *o) { (void)o; return NULL; }
+void ksu_destroy_sepolicy(struct selinux_policy *o) { (void)o; }
+bool ksu_type(struct policydb *db, const char *n, const char *a) { (void)db;(void)n;(void)a; return false; }
+bool ksu_attribute(struct policydb *db, const char *n) { (void)db;(void)n; return false; }
+bool ksu_permissive(struct policydb *db, const char *t) { (void)db;(void)t; return false; }
+bool ksu_enforce(struct policydb *db, const char *t) { (void)db;(void)t; return false; }
+bool ksu_typeattribute(struct policydb *db, const char *t, const char *a) { (void)db;(void)t;(void)a; return false; }
+bool ksu_exists(struct policydb *db, const char *t) { (void)db;(void)t; return false; }
+bool ksu_allow(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { (void)db;(void)s;(void)t;(void)c;(void)p; return false; }
+bool ksu_deny(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { (void)db;(void)s;(void)t;(void)c;(void)p; return false; }
+bool ksu_auditallow(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { (void)db;(void)s;(void)t;(void)c;(void)p; return false; }
+bool ksu_dontaudit(struct policydb *db, const char *s, const char *t, const char *c, const char *p) { (void)db;(void)s;(void)t;(void)c;(void)p; return false; }
+bool ksu_allowxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { (void)db;(void)s;(void)t;(void)c;(void)r; return false; }
+bool ksu_auditallowxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { (void)db;(void)s;(void)t;(void)c;(void)r; return false; }
+bool ksu_dontauditxperm(struct policydb *db, const char *s, const char *t, const char *c, const char *r) { (void)db;(void)s;(void)t;(void)c;(void)r; return false; }
+bool ksu_type_transition(struct policydb *db, const char *s, const char *t, const char *c, const char *d, const char *o) { (void)db;(void)s;(void)t;(void)c;(void)d;(void)o; return false; }
+bool ksu_type_change(struct policydb *db, const char *s, const char *t, const char *c, const char *d) { (void)db;(void)s;(void)t;(void)c;(void)d; return false; }
+bool ksu_type_member(struct policydb *db, const char *s, const char *t, const char *c, const char *d) { (void)db;(void)s;(void)t;(void)c;(void)d; return false; }
+bool ksu_genfscon(struct policydb *db, const char *f, const char *p, const char *c) { (void)db;(void)f;(void)p;(void)c; return false; }
+#endif

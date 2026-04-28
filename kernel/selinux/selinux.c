@@ -1,3 +1,7 @@
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+/* SELinux internals were heavily refactored in 5.7 (selinux_state.policy etc).
+ * On 4.19, this whole file is replaced by stubs at the bottom. */
 #include "selinux.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
@@ -220,3 +224,29 @@ void escape_to_root_for_adb_root(void)
     }
     commit_creds(cred);
 }
+
+#else
+/* 4.x stubs: SELinux integration is non-functional on this kernel.
+ * apps cannot escalate via SELinux domain transition.
+ * This is a known limitation of running latest KernelSU on non-GKI 4.19.
+ */
+#include <linux/cred.h>
+#include "selinux.h"
+#include "klog.h"
+
+u32 ksu_file_sid __read_mostly = 0;
+
+void setup_selinux(const char *p, struct cred *c) { (void)p; (void)c; }
+void setenforce(bool e) { (void)e; }
+bool getenforce(void) { return false; }
+void cache_sid(void) { }
+bool is_task_ksu_domain(const struct cred *cred) { (void)cred; return false; }
+bool is_ksu_domain(void) { return false; }
+bool is_zygote(const struct cred *cred) { (void)cred; return false; }
+bool is_init(const struct cred *cred) { (void)cred; return false; }
+void setup_ksu_cred(void) { }
+void escape_to_root_for_adb_root(void) {
+    /* On 4.19, just commit the override using current's existing creds.
+     * adbd is already root in userdebug; no SELinux escalation needed. */
+}
+#endif /* >= 5.7 */

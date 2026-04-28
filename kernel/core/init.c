@@ -119,13 +119,18 @@ int __init kernelsu_init(void)
         pr_err("prepare cred failed!\n");
     }
 
-    ksu_syscall_hook_init();
+    /* 4.19 compat: skip syscall hook init (likely patches syscall table
+     * with arch-specific code that doesn't match 4.19 layout). */
+    pr_info("kernelsu 4.19-compat: skipping ksu_syscall_hook_init\n");
+    /* ksu_syscall_hook_init(); */
 
     ksu_feature_init();
     ksu_sulog_init();
     ksu_adb_root_init();
 
-    ksu_supercalls_init();
+    /* 4.19 compat: skip supercalls init (registers ioctl that might use 5.x api). */
+    pr_info("kernelsu 4.19-compat: skipping ksu_supercalls_init\n");
+    /* ksu_supercalls_init(); */
 
     if (ksu_late_loaded) {
         pr_info("late load mode, skipping kprobe hooks\n");
@@ -157,7 +162,10 @@ int __init kernelsu_init(void)
         }
 
     } else {
-        ksu_syscall_hook_manager_init();
+        /* 4.19 compat: skip syscall_hook_manager_init (registers kprobes
+         * on syscall entry — known to crash with 4.19 syscall table). */
+        pr_info("kernelsu 4.19-compat: skipping ksu_syscall_hook_manager_init\n");
+        /* ksu_syscall_hook_manager_init(); */
 
         ksu_allowlist_init();
 

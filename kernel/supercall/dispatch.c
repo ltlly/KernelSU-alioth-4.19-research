@@ -1,3 +1,6 @@
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+/* supercall dispatch uses 5.x scheduler internals — wrap */
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/slab.h>
@@ -838,3 +841,28 @@ void ksu_supercall_cleanup_state(void)
     }
     up_write(&mount_list_lock);
 }
+
+#else
+/* 4.x stubs: supercall dispatch disabled. */
+#include <linux/errno.h>
+#include <linux/types.h>
+#include <linux/list.h>
+#include <linux/errno.h>
+#include <linux/rwsem.h>
+
+long ksu_handle_supercall(unsigned long cmd, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5) {
+    (void)cmd;(void)arg2;(void)arg3;(void)arg4;(void)arg5; return -ENOSYS;
+}
+
+/* Stubs for symbols referenced by other KSU modules — keep linker happy. */
+long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp) {
+    (void)cmd;(void)argp; return -ENOSYS;
+}
+void __init ksu_supercall_dump_commands(void) { }
+void ksu_supercall_cleanup_state(void) { }
+
+/* Mount tracking globals (used by feature/kernel_umount.c) — provide empty
+ * list and dummy lock so umount feature doesn't crash. */
+struct list_head mount_list = LIST_HEAD_INIT(mount_list);
+DECLARE_RWSEM(mount_list_lock);
+#endif

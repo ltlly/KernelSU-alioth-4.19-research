@@ -41,7 +41,14 @@ static const struct ksu_feature_handler kernel_umount_handler = {
     .set_handler = kernel_umount_feature_set,
 };
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 extern int path_umount(struct path *path, int flags);
+#else
+/* 4.x: path_umount not exported. KernelSU's per-app umount feature
+ * (clean mount namespace for non-root apps) is unavailable on 4.19. */
+static inline int path_umount(struct path *path, int flags) { (void)path;(void)flags; return -ENOSYS; }
+#endif
 
 static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {

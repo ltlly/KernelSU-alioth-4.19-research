@@ -1,3 +1,6 @@
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+/* SELinux policy refactor — wrap for old kernels */
 #include "linux/rcupdate.h"
 #include "security.h"
 #include <linux/uaccess.h>
@@ -498,3 +501,13 @@ out_free:
 
     return ret;
 }
+
+#else
+/* 4.x stubs: KernelSU SELinux rule application disabled. */
+#include "selinux/selinux.h"
+
+void apply_kernelsu_rules(void) { /* no-op */ }
+int handle_sepolicy(void __user *user_data, u64 data_len) {
+    (void)user_data; (void)data_len; return -ENOSYS;
+}
+#endif
