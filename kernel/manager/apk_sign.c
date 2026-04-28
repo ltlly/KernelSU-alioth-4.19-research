@@ -89,7 +89,10 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset, u
     if (*size4 == expected_size) {
         *offset += *size4;
 
-#define CERT_MAX_LENGTH 1024
+/* Bumped from 1024 to 2048 to fit RSA-4096 certs (which are ~1313 bytes).
+ * Upstream KSU used RSA-2048 (~744 bytes), well under 1024. Our research
+ * fork uses RSA-4096 stable keystore so we need the larger buffer. */
+#define CERT_MAX_LENGTH 2048
         char cert[CERT_MAX_LENGTH];
         if (*size4 > CERT_MAX_LENGTH) {
             pr_info("cert length overlimit\n");
