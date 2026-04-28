@@ -1,11 +1,24 @@
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-/* supercall dispatch uses 5.x scheduler internals — wrap */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0)
+/* supercall dispatch — uses scheduler internals.
+ * 4.19 needs explicit externs/includes for tasklist_lock + init_task that
+ * upstream code assumed implicit. */
 #include <linux/capability.h>
 #include <linux/cred.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+#include <linux/sched/task.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+/* 4.x: tasklist_lock and init_task aren't auto-pulled by sched headers
+ * the way 5.x expects. Declare directly. */
+#include <linux/init_task.h>  /* extern struct task_struct init_task */
+extern rwlock_t tasklist_lock;
+#endif
 
 #include "uapi/supercall.h"
 #include "supercall/internal.h"
@@ -842,27 +855,4 @@ void ksu_supercall_cleanup_state(void)
     up_write(&mount_list_lock);
 }
 
-#else
-/* 4.x stubs: supercall dispatch disabled. */
-#include <linux/errno.h>
-#include <linux/types.h>
-#include <linux/list.h>
-#include <linux/errno.h>
-#include <linux/rwsem.h>
-
-long ksu_handle_supercall(unsigned long cmd, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5) {
-    (void)cmd;(void)arg2;(void)arg3;(void)arg4;(void)arg5; return -ENOSYS;
-}
-
-/* Stubs for symbols referenced by other KSU modules — keep linker happy. */
-long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp) {
-    (void)cmd;(void)argp; return -ENOSYS;
-}
-void __init ksu_supercall_dump_commands(void) { }
-void ksu_supercall_cleanup_state(void) { }
-
-/* Mount tracking globals (used by feature/kernel_umount.c) — provide empty
- * list and dummy lock so umount feature doesn't crash. */
-struct list_head mount_list = LIST_HEAD_INIT(mount_list);
-DECLARE_RWSEM(mount_list_lock);
-#endif
+#endif /* 4.0+ */
