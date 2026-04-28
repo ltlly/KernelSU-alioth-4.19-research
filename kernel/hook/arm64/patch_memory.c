@@ -11,8 +11,22 @@
 #include "linux/gfp.h" // IWYU pragma: keep
 #include "linux/uaccess.h"
 #include "linux/stop_machine.h"
+#include "linux/version.h"
 #include "asm/cacheflush.h"
+#include "asm/pgtable.h"
 #include "asm-generic/fixmap.h"
+
+/* 4.19 doesn't define pmd_leaf/pud_leaf (added in 5.7).
+ * arm64 4.19 uses pmd_sect/pud_sect for section-mapped huge pages.
+ * Provide fallback if not defined — section-mapped kernel text is
+ * common on arm64 4.19 and must be detected during phys_from_virt walk.
+ */
+#ifndef pmd_leaf
+#define pmd_leaf(pmd) pmd_sect(pmd)
+#endif
+#ifndef pud_leaf
+#define pud_leaf(pud) pud_sect(pud)
+#endif
 
 // https://github.com/fuqiuluo/ovo/blob/f7da411458e87d32438dc14fce5a3313ed0c967e/ovo/mmuhack.c#L21
 
